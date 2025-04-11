@@ -1,5 +1,3 @@
-
-```markdown
 # 🧠 Mental Health Counselor Assistant
 
 A privacy-friendly, intelligent assistant designed to help mental health professionals explore **response suggestions** based on patient input. Built with `XGBoost` for intent classification and `Mistral-7B` for natural language generation, this app helps support clinical conversations with empathy and structure — while keeping you in full control.
@@ -105,5 +103,4 @@ This project was developed for an interview to showcase how **AI and empathy** c
 ## 📄 License
 
 MIT — free to use and modify, but please be thoughtful in healthcare applications.
-```
 
