@@ -2,6 +2,6 @@ streamlit
 pandas
 scikit-learn
 xgboost
-llama-cpp-python
-matplotlib
 seaborn
+matplotlib
+llama-cpp-python --prefer-binary
