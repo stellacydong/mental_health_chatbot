@@ -1,6 +1,4 @@
 
----
-
 ```markdown
 # 🧠 Mental Health Counselor Assistant
 
@@ -108,6 +106,4 @@ This project was developed for an interview to showcase how **AI and empathy** c
 
 MIT — free to use and modify, but please be thoughtful in healthcare applications.
 ```
-
----
 
