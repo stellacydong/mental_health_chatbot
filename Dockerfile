@@ -1,30 +1,26 @@
-# Dockerfile: Streamlit + XGBoost + llama-cpp-python (Mistral-7B)
-
+# Base image
 FROM python:3.10-slim
+
+# System dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    curl \
+    ninja-build \
+    libopenblas-dev \
+    && apt-get clean
 
 # Set working directory
 WORKDIR /app
 
-# Install OS dependencies for llama-cpp-python
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    ninja-build \
-    git \
-    wget \
-    libopenblas-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy and install Python dependencies
-COPY requirements.txt ./
+# Copy requirements and install
+COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir --prefer-binary -r requirements.txt
 
-# Copy app code
+# Copy the rest of the app
 COPY . .
 
-# Expose Streamlit port
-EXPOSE 8501
-
-# Launch the Streamlit app
+# Run the app
 CMD ["streamlit", "run", "app_local.py", "--server.port=8501", "--server.address=0.0.0.0"]
