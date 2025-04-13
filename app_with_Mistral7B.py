@@ -1,6 +1,5 @@
-# Streamlit App: Counselor Assistant (XGBoost + Flan-T5)
-
 import streamlit as st
+from utils.helper_functions import *
 import os
 import pandas as pd
 import json
@@ -11,12 +10,10 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
-from transformers import pipeline
+from llama_cpp import Llama
 
-# --- Page Setup ---
 st.set_page_config(page_title="Counselor Assistant", layout="centered")
 
-# --- Styling ---
 st.markdown("""
     <style>
         .main { background-color: #f9f9f9; padding: 1rem 2rem; border-radius: 12px; }
@@ -26,22 +23,20 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- App Header ---
 st.title("🧠 Mental Health Counselor Assistant")
 st.markdown("""
-Welcome, counselor 👋
+Hi there, counselor 👋
 
-This tool offers **AI-powered suggestions** to support you when responding to your patients.
+This tool is here to offer **supportive, AI-generated suggestions** when you’re not quite sure how to respond to a patient.
 
-### What it does:
-- 🧩 Predicts what type of support is best: *Advice*, *Validation*, *Information*, or *Question*
-- 💬 Generates a suggestion using **Flan-T5**
-- 💾 Lets you save your session for reflection
+### How it helps:
+- 🧩 Predicts the type of support your patient might need (advice, validation, information, & question.)
+- 💬 Generates a supportive counselor response
+- 📁 Lets you save and track conversations for reflection
 
-This is here to support — not replace — your clinical instincts 💚
+It's a sidekick, not a substitute for your clinical judgment 💚
 """)
 
-# --- Load and label dataset ---
 df = pd.read_csv("dataset/Kaggle_Mental_Health_Conversations_train.csv")
 df = df[['Context', 'Response']].dropna().copy()
 
@@ -62,16 +57,14 @@ def auto_label_response(response):
 df['response_type'] = df['Response'].apply(auto_label_response)
 df['combined_text'] = df['Context'] + " " + df['Response']
 
-# Encode labels
 le = LabelEncoder()
 y = le.fit_transform(df['response_type'])
 
-# TF-IDF + Train-test split
 vectorizer = TfidfVectorizer(max_features=2000, ngram_range=(1, 2))
 X = vectorizer.fit_transform(df['combined_text'])
+
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
 
-# XGBoost model
 xgb_model = XGBClassifier(
     objective='multi:softmax',
     num_class=len(le.classes_),
@@ -83,14 +76,13 @@ xgb_model = XGBClassifier(
 )
 xgb_model.fit(X_train, y_train)
 
-# --- Load Flan-T5 Model ---
-@st.cache_resource(show_spinner="Loading Flan-T5 model...")
+MODEL_PATH = os.path.expanduser("/Users/Pi/models/mistral/mistral-7b-instruct-v0.1.Q4_K_M.gguf")
+@st.cache_resource(show_spinner=True)
 def load_llm():
-    return pipeline("text2text-generation", model="google/flan-t5-base")
+    return Llama(model_path=MODEL_PATH, n_ctx=2048, n_threads=os.cpu_count())
 
 llm = load_llm()
 
-# --- Utility Functions ---
 def predict_response_type(user_input):
     vec = vectorizer.transform([user_input])
     pred = xgb_model.predict(vec)
@@ -99,74 +91,49 @@ def predict_response_type(user_input):
     return label, proba
 
 def build_prompt(user_input, response_type):
-    examples = {
-        "advice": 'Patient: "I’m having trouble sleeping."\nCounselor: "It might help to create a bedtime routine and avoid screens before sleep. Would you like to try that together?"',
-        "validation": 'Patient: "I feel like no one understands me."\nCounselor: "It makes sense that you feel that way — your feelings are valid and you deserve to be heard."',
-        "information": 'Patient: "Why do I feel this way for no reason?"\nCounselor: "Sometimes our brains respond to stress or trauma in ways that are hard to detect. It could be anxiety or depression, and we can work through it together."',
-        "question": 'Patient: "I don’t know what to do anymore."\nCounselor: "Can you tell me more about what’s been feeling difficult lately?"'
+    prompts = {
+        "advice": f"A patient said: \"{user_input}\". What advice should a mental health counselor give to support them?",
+        "validation": f"A patient said: \"{user_input}\". How can a counselor validate and empathize with their emotions?",
+        "information": f"A patient said: \"{user_input}\". Explain what might be happening from a mental health perspective.",
+        "question": f"A patient said: \"{user_input}\". What thoughtful follow-up questions should a counselor ask?"
     }
-    
-    return f"""{examples[response_type]}
-
-Patient: "{user_input}"
-Counselor:"""
-
+    return prompts.get(response_type, prompts["information"])
 
 def generate_llm_response(user_input, response_type):
     prompt = build_prompt(user_input, response_type)
     start = time.time()
     with st.spinner("Thinking through a helpful response for your patient..."):
-        result = llm(
-            prompt,
-            max_length=256,
-            min_length=60,  # forces longer responses
-            do_sample=True,
-            temperature=0.9,
-            top_p=0.95,
-            num_return_sequences=1
-        )
+        result = llm(prompt, max_tokens=300, temperature=0.7)
     end = time.time()
     st.info(f"Response generated in {end - start:.1f} seconds")
-    return result[0]["generated_text"].strip()
-
-
+    return result['choices'][0]['text'].strip()
 
 def trim_memory(history, max_turns=6):
     return history[-max_turns * 2:]
 
 def save_conversation(history):
-    now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    with open(f"logs/chat_log_{now}.csv", "w", newline='') as f:
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open("logs/chat_log_combined.csv", "w", newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(["Role", "Content", "Intent", "Confidence"])
+        writer.writerow(["Timestamp", "Role", "Content", "Intent", "Confidence"])
         for entry in history:
             writer.writerow([
+                now,
                 entry.get("role", ""),
                 entry.get("content", ""),
                 entry.get("label", ""),
-                round(float(entry.get("confidence", 0)) * 100)
+                round(float(entry.get("confidence", 0)), 2)
             ])
-    st.success(f"Saved to chat_log_{now}.csv")
+    st.success("Saved to chat_log_combined.csv")
 
-# --- Session Setup ---
 if "history" not in st.session_state:
     st.session_state.history = []
 if "user_input" not in st.session_state:
     st.session_state.user_input = ""
 
-# --- Sample Prompts ---
-with st.expander("💡 Sample inputs you can try"):
-    st.markdown("""
-    - My patient is constantly feeling overwhelmed at work.
-    - A student says they panic every time they have to speak in class.
-    - Someone told me they think they’ll never feel okay again.
-    """)
-
-# --- Text Input ---
 MAX_WORDS = 1000
 word_count = len(st.session_state.user_input.split())
 st.markdown(f"**📝 Input Length:** {word_count} / {MAX_WORDS} words")
-
 st.session_state.user_input = st.text_area(
     "💬 What did your patient say?",
     value=st.session_state.user_input,
@@ -174,7 +141,6 @@ st.session_state.user_input = st.text_area(
     height=100
 )
 
-# --- Buttons ---
 col1, col2, col3 = st.columns([2, 1, 1])
 with col1:
     send = st.button("💡 Suggest Response")
@@ -183,19 +149,13 @@ with col2:
 with col3:
     reset = st.button("🔁 Reset")
 
-# --- Main Logic ---
 if send and st.session_state.user_input:
     user_input = st.session_state.user_input
     predicted_type, confidence = predict_response_type(user_input)
     reply = generate_llm_response(user_input, predicted_type)
 
     st.session_state.history.append({"role": "user", "content": user_input})
-    st.session_state.history.append({
-        "role": "assistant",
-        "content": reply,
-        "label": predicted_type,
-        "confidence": confidence
-    })
+    st.session_state.history.append({"role": "assistant", "content": reply, "label": predicted_type, "confidence": confidence})
     st.session_state.history = trim_memory(st.session_state.history)
 
 if save:
@@ -206,13 +166,12 @@ if reset:
     st.session_state.user_input = ""
     st.success("Conversation has been cleared.")
 
-# --- Display Chat History ---
 st.markdown("---")
 for turn in st.session_state.history:
     if turn["role"] == "user":
         st.markdown(f"🧍‍♀️ **Patient:** {turn['content']}")
     else:
-        st.markdown(f"👩‍⚕️👨‍⚕️ **Suggested Counselor Response:** {turn['content']}")
+        st.markdown(f"👨‍⚕️ **Suggested Counselor Response:** {turn['content']}")
         st.caption(f"_Intent: {turn['label']} (Confidence: {turn['confidence']:.0%})_")
     st.markdown("---")
 

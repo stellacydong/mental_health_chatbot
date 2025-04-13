@@ -1,26 +1,30 @@
-# Base image
+# Use the official Python base image
 FROM python:3.10-slim
 
-# System dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    git \
-    curl \
-    ninja-build \
-    libopenblas-dev \
-    && apt-get clean
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Set working directory
+# Set work directory
 WORKDIR /app
 
-# Copy requirements and install
-COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir --prefer-binary -r requirements.txt
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libffi-dev \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy the rest of the app
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy app source code
 COPY . .
 
-# Run the app
-CMD ["streamlit", "run", "app_local.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Expose the port Streamlit runs on
+EXPOSE 8501
+
+# Run the application
+CMD ["streamlit", "run", "app.py"]

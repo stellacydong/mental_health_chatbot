@@ -1,7 +1,8 @@
-streamlit
-pandas
+streamlit==1.32.2
+transformers==4.38.2
 scikit-learn
 xgboost
-seaborn
+pandas
 matplotlib
-llama-cpp-python --prefer-binary
+torch==2.1.0
+--extra-index-url https://download.pytorch.org/whl/cpu
